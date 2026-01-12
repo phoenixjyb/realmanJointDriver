@@ -431,7 +431,115 @@ def generate_launch_description():
 
 ---
 
-## 9. Future Considerations | 未来考虑
+## 10. Motor Setup Process | 电机设置流程
+
+Before using the driver, each motor must be configured with a unique CAN ID.
+
+使用驱动前，必须为每个电机配置唯一的CAN ID。
+
+### 10.1 Factory Default | 出厂默认
+
+All motors ship with **CAN ID = 1**. They must be configured individually.
+
+所有电机出厂时**CAN ID = 1**。必须单独配置每个电机。
+
+### 10.2 Target Configuration | 目标配置
+
+| Joint 关节 | Name 名称 | Target ID 目标ID |
+|-------|------|------------|
+| 1 | base_yaw 底座偏航 | 11 |
+| 2 | base_pitch 底座俯仰 | 12 |
+| 3 | elbow 肘部 | 13 |
+
+### 10.3 Setup Procedure | 设置步骤
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                Motor ID Setup Process | 电机ID设置流程               │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Prerequisites | 前提条件:                                           │
+│  - CAN interface up | CAN接口已启动                                  │
+│  - Motors powered | 电机已上电                                       │
+│                                                                      │
+│  Step 1: Connect ONLY motor 1 to CAN bus                            │
+│  步骤1：只将电机1连接到CAN总线                                        │
+│                                                                      │
+│  Step 2: Change ID from 1 to 11                                     │
+│  步骤2：将ID从1改为11                                                 │
+│    $ python3 motor_setup.py -i can0 --current-id 1 --new-id 11      │
+│                                                                      │
+│  Step 3: Power cycle motor 1                                        │
+│  步骤3：给电机1断电重启                                               │
+│                                                                      │
+│  Step 4: Disconnect motor 1, connect ONLY motor 2                   │
+│  步骤4：断开电机1，只连接电机2                                        │
+│                                                                      │
+│  Step 5: Change ID from 1 to 12                                     │
+│  步骤5：将ID从1改为12                                                 │
+│    $ python3 motor_setup.py -i can0 --current-id 1 --new-id 12      │
+│                                                                      │
+│  Step 6: Power cycle motor 2                                        │
+│  步骤6：给电机2断电重启                                               │
+│                                                                      │
+│  Step 7: Disconnect motor 2, connect ONLY motor 3                   │
+│  步骤7：断开电机2，只连接电机3                                        │
+│                                                                      │
+│  Step 8: Change ID from 1 to 13                                     │
+│  步骤8：将ID从1改为13                                                 │
+│    $ python3 motor_setup.py -i can0 --current-id 1 --new-id 13      │
+│                                                                      │
+│  Step 9: Power cycle motor 3                                        │
+│  步骤9：给电机3断电重启                                               │
+│                                                                      │
+│  Step 10: Connect all motors and verify                             │
+│  步骤10：连接所有电机并验证                                           │
+│    $ python3 motor_setup.py -i can0 --scan                          │
+│    Expected: Found motors at ID 11, 12, 13                          │
+│    预期结果：在ID 11, 12, 13发现电机                                  │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### 10.4 ID Change Protocol | ID更改协议
+
+The ID change process writes to the motor's memory control table:
+
+ID更改过程向电机的内存控制表写入数据：
+
+```cpp
+// 1. Disable motor | 禁用电机
+writeRegister(current_id, 0x0A, 0);  // SYS_ENABLE_DRIVER = 0
+
+// 2. Write new ID | 写入新ID
+writeRegister(current_id, 0x01, new_id);  // SYS_ID = new_id
+
+// 3. Save to Flash | 保存到Flash
+writeRegister(current_id, 0x0C, 1);  // SYS_SAVE_TO_FLASH = 1
+
+// 4. Power cycle required! | 需要断电重启！
+```
+
+### 10.5 Motor Setup Utility | 电机设置工具
+
+Location | 位置: `scripts/motor_setup.py`
+
+Commands | 命令:
+
+| Command 命令 | Description 描述 |
+|---------|-------------|
+| `--scan` | Scan for motors on bus 扫描总线上的电机 |
+| `--id N --status` | Get motor N status 获取电机N状态 |
+| `--current-id N --new-id M` | Change ID from N to M 将ID从N改为M |
+| `--id N --clear-errors` | Clear errors on motor N 清除电机N的错误 |
+| `--id N --set-zero` | Set current position as zero 将当前位置设为零位 |
+| `--id N --enable` | Enable motor N 使能电机N |
+| `--id N --disable` | Disable motor N 禁用电机N |
+| `--id N --clear-iap` | Clear IAP flag 清除IAP标志 |
+
+---
+
+## 11. Future Considerations | 未来考虑
 
 1. **ros2_control Integration | ros2_control集成**: Implement hardware interface for MoveIt2 compatibility 实现硬件接口以兼容MoveIt2
 2. **Trajectory Execution | 轨迹执行**: Add JointTrajectory action server 添加关节轨迹动作服务器
