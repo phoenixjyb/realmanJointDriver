@@ -1,0 +1,40 @@
+realman_arm_driver:
+  ros__parameters:
+    # CAN interface
+    can_interface: "can0"
+    
+    # Control rates
+    control_rate_hz: 50.0    # Main control loop frequency
+    status_rate_hz: 10.0     # Status publish frequency
+    
+    # Communication settings
+    can_timeout_ms: 10       # Timeout for CAN response
+    max_consecutive_errors: 5 # Max errors before emergency stop
+    
+    # Joint configuration
+    # Order: base_yaw (10Nm), base_pitch (30Nm), elbow (10Nm)
+    joint_names: ["base_yaw", "base_pitch", "elbow"]
+    joint_ids: [306, 305, 304]
+    
+    # Motor torque ratings (Nm) - for reference
+    joint_torques: [10.0, 30.0, 10.0]
+    
+    # Position limits (radians) - TO BE CONFIGURED
+    # Default: +/- 180°, +/- 90°, +/- 135°
+    position_limits_min: [-3.14159, -1.5708, -2.3562]
+    position_limits_max: [3.14159, 1.5708, 2.3562]
+    
+    # Velocity limits (rad/s) - TO BE CONFIGURED
+    velocity_limits: [1.0, 1.0, 1.0]
+    
+    # Current limits (mA) - TO BE CONFIGURED
+    # Higher limit for 30Nm motor
+    current_limits: [10000.0, 20000.0, 10000.0]
+    
+    # Default control mode (3 = position mode)
+    default_mode: 3
+    
+    # Safety settings
+    enable_on_startup: false  # Don't auto-enable motors
+    clear_errors_on_startup: true
+    set_iap_flag_on_startup: true  # Required per protocol

@@ -1,0 +1,12 @@
+# Set control mode for all joints
+# Request
+uint8 mode    # 1=current, 2=velocity, 3=position
+
+# Constants
+uint8 MODE_CURRENT=1
+uint8 MODE_VELOCITY=2
+uint8 MODE_POSITION=3
+---
+# Response
+bool success
+string message
