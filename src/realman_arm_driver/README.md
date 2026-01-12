@@ -18,9 +18,13 @@ This package provides a ROS2 node that communicates with RealMan joint motors ov
 
 | Joint 关节 | Name 名称 | Torque 扭矩 | CAN ID | Role 功能 |
 |-------|------|--------|--------|------|
-| 1 | base_yaw | 10 Nm | 306 | Base rotation 底座旋转 |
-| 2 | base_pitch | 30 Nm | 305 | Shoulder pitch 肩部俯仰 |
-| 3 | elbow | 10 Nm | 304 | Elbow pitch 肘部俯仰 |
+| 1 | base_yaw | 10 Nm | 11 | Base rotation 底座旋转 |
+| 2 | base_pitch | 30 Nm | 12 | Shoulder pitch 肩部俯仰 |
+| 3 | elbow | 10 Nm | 13 | Elbow pitch 肘部俯仰 |
+
+> **Note:** Valid CAN IDs are 1-30. Factory default is ID=1 for all motors.
+> 
+> **注意：** 有效的CAN ID为1-30。出厂默认所有电机ID都是1。
 
 ## Prerequisites | 前置条件
 
@@ -55,6 +59,62 @@ iface can0 can static
     bitrate 1000000
     dbitrate 5000000
     fd on
+```
+
+## Motor Setup Utility | 电机设置工具
+
+Before using the driver, you need to configure unique CAN IDs for each motor.
+
+使用驱动前，需要为每个电机配置唯一的CAN ID。
+
+### Scan for motors | 扫描电机
+
+```bash
+cd src/realman_arm_driver/scripts
+python3 motor_setup.py -i can0 --scan
+```
+
+### Change motor ID | 更改电机ID
+
+**Important:** Connect only ONE motor at a time when changing IDs!
+
+**重要：** 更改ID时每次只连接一个电机！
+
+```bash
+# Setup motor 1 (base_yaw): ID 1 -> 11
+# 设置电机1（底座偏航）：ID 1 -> 11
+python3 motor_setup.py -i can0 --current-id 1 --new-id 11
+# Power cycle the motor! 给电机断电重启！
+
+# Setup motor 2 (base_pitch): ID 1 -> 12
+# 设置电机2（底座俯仰）：ID 1 -> 12
+python3 motor_setup.py -i can0 --current-id 1 --new-id 12
+# Power cycle the motor! 给电机断电重启！
+
+# Setup motor 3 (elbow): ID 1 -> 13
+# 设置电机3（肘部）：ID 1 -> 13
+python3 motor_setup.py -i can0 --current-id 1 --new-id 13
+# Power cycle the motor! 给电机断电重启！
+```
+
+### Other commands | 其他命令
+
+```bash
+# Get motor status | 获取电机状态
+python3 motor_setup.py -i can0 --id 11 --status
+
+# Clear errors | 清除错误
+python3 motor_setup.py -i can0 --id 11 --clear-errors
+
+# Set zero position | 设置零位
+python3 motor_setup.py -i can0 --id 11 --set-zero
+
+# Enable/disable motor | 使能/禁用电机
+python3 motor_setup.py -i can0 --id 11 --enable
+python3 motor_setup.py -i can0 --id 11 --disable
+
+# Clear IAP flag (required before operation) | 清除IAP标志
+python3 motor_setup.py -i can0 --id 11 --clear-iap
 ```
 
 ## Installation | 安装
@@ -144,8 +204,8 @@ realman_arm_driver:
     control_rate_hz: 50.0          # 控制循环频率
     status_rate_hz: 10.0           # 状态发布频率
     
-    joint_names: ["base_yaw", "base_pitch", "elbow"]  # 关节名称
-    joint_ids: [306, 305, 304]                        # 关节CAN ID
+    joint_names: ["base_yaw", "base_pitch", "elbow"]
+    joint_ids: [11, 12, 13]                       # 关节CAN ID (valid: 1-30)
     
     # Position limits (radians) | 位置限制（弧度）
     position_limits_min: [-3.14159, -1.5708, -2.3562]

@@ -13,8 +13,9 @@ realman_arm_driver:
     
     # Joint configuration
     # Order: base_yaw (10Nm), base_pitch (30Nm), elbow (10Nm)
+    # Valid CAN IDs: 1-30 (0x01-0x1E)
     joint_names: ["base_yaw", "base_pitch", "elbow"]
-    joint_ids: [306, 305, 304]
+    joint_ids: [11, 12, 13]
     
     # Motor torque ratings (Nm) - for reference
     joint_torques: [10.0, 30.0, 10.0]
