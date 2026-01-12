@@ -18,9 +18,9 @@ This package provides a ROS2 node that communicates with RealMan joint motors ov
 
 | Joint 关节 | Name 名称 | Torque 扭矩 | CAN ID | Role 功能 |
 |-------|------|--------|--------|------|
-| 1 | base_yaw | 10 Nm | 11 | Base rotation 底座旋转 |
-| 2 | base_pitch | 30 Nm | 12 | Shoulder pitch 肩部俯仰 |
-| 3 | elbow | 10 Nm | 13 | Elbow pitch 肘部俯仰 |
+| 1 | base_yaw | 10 Nm | 6 | Base rotation 底座旋转 |
+| 2 | base_pitch | 30 Nm | 5 | Shoulder pitch 肩部俯仰 |
+| 3 | elbow | 10 Nm | 4 | Elbow pitch 肘部俯仰 |
 
 > **Note:** Valid CAN IDs are 1-30. Factory default is ID=1 for all motors.
 > 
@@ -81,19 +81,19 @@ python3 motor_setup.py -i can0 --scan
 **重要：** 更改ID时每次只连接一个电机！
 
 ```bash
-# Setup motor 1 (base_yaw): ID 1 -> 11
-# 设置电机1（底座偏航）：ID 1 -> 11
-python3 motor_setup.py -i can0 --current-id 1 --new-id 11
+# Setup motor 1 (base_yaw): ID 1 -> 6
+# 设置电机1（底座偏航）：ID 1 -> 6
+python3 motor_setup.py -i can0 --current-id 1 --new-id 6
 # Power cycle the motor! 给电机断电重启！
 
-# Setup motor 2 (base_pitch): ID 1 -> 12
-# 设置电机2（底座俯仰）：ID 1 -> 12
-python3 motor_setup.py -i can0 --current-id 1 --new-id 12
+# Setup motor 2 (base_pitch): ID 1 -> 5
+# 设置电机2（底座俯仰）：ID 1 -> 5
+python3 motor_setup.py -i can0 --current-id 1 --new-id 5
 # Power cycle the motor! 给电机断电重启！
 
-# Setup motor 3 (elbow): ID 1 -> 13
-# 设置电机3（肘部）：ID 1 -> 13
-python3 motor_setup.py -i can0 --current-id 1 --new-id 13
+# Setup motor 3 (elbow): ID 1 -> 4
+# 设置电机3（肘部）：ID 1 -> 4
+python3 motor_setup.py -i can0 --current-id 1 --new-id 4
 # Power cycle the motor! 给电机断电重启！
 ```
 
@@ -205,7 +205,7 @@ realman_arm_driver:
     status_rate_hz: 10.0           # 状态发布频率
     
     joint_names: ["base_yaw", "base_pitch", "elbow"]
-    joint_ids: [11, 12, 13]                       # 关节CAN ID (valid: 1-30)
+    joint_ids: [6, 5, 4]                          # 关节CAN ID (valid: 1-30)
     
     # Position limits (radians) | 位置限制（弧度）
     position_limits_min: [-3.14159, -1.5708, -2.3562]

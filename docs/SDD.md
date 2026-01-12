@@ -447,9 +447,9 @@ All motors ship with **CAN ID = 1**. They must be configured individually.
 
 | Joint 关节 | Name 名称 | Target ID 目标ID |
 |-------|------|------------|
-| 1 | base_yaw 底座偏航 | 11 |
-| 2 | base_pitch 底座俯仰 | 12 |
-| 3 | elbow 肘部 | 13 |
+| 1 | base_yaw 底座偏航 | 6 |
+| 2 | base_pitch 底座俯仰 | 5 |
+| 3 | elbow 肘部 | 4 |
 
 ### 10.3 Setup Procedure | 设置步骤
 
@@ -465,9 +465,9 @@ All motors ship with **CAN ID = 1**. They must be configured individually.
 │  Step 1: Connect ONLY motor 1 to CAN bus                            │
 │  步骤1：只将电机1连接到CAN总线                                        │
 │                                                                      │
-│  Step 2: Change ID from 1 to 11                                     │
-│  步骤2：将ID从1改为11                                                 │
-│    $ python3 motor_setup.py -i can0 --current-id 1 --new-id 11      │
+│  Step 2: Change ID from 1 to 6                                      │
+│  步骤2：将ID从1改为6                                                  │
+│    $ python3 motor_setup.py -i can0 --current-id 1 --new-id 6       │
 │                                                                      │
 │  Step 3: Power cycle motor 1                                        │
 │  步骤3：给电机1断电重启                                               │
@@ -475,9 +475,9 @@ All motors ship with **CAN ID = 1**. They must be configured individually.
 │  Step 4: Disconnect motor 1, connect ONLY motor 2                   │
 │  步骤4：断开电机1，只连接电机2                                        │
 │                                                                      │
-│  Step 5: Change ID from 1 to 12                                     │
-│  步骤5：将ID从1改为12                                                 │
-│    $ python3 motor_setup.py -i can0 --current-id 1 --new-id 12      │
+│  Step 5: Change ID from 1 to 5                                      │
+│  步骤5：将ID从1改为5                                                  │
+│    $ python3 motor_setup.py -i can0 --current-id 1 --new-id 5       │
 │                                                                      │
 │  Step 6: Power cycle motor 2                                        │
 │  步骤6：给电机2断电重启                                               │
@@ -485,9 +485,9 @@ All motors ship with **CAN ID = 1**. They must be configured individually.
 │  Step 7: Disconnect motor 2, connect ONLY motor 3                   │
 │  步骤7：断开电机2，只连接电机3                                        │
 │                                                                      │
-│  Step 8: Change ID from 1 to 13                                     │
-│  步骤8：将ID从1改为13                                                 │
-│    $ python3 motor_setup.py -i can0 --current-id 1 --new-id 13      │
+│  Step 8: Change ID from 1 to 4                                      │
+│  步骤8：将ID从1改为4                                                  │
+│    $ python3 motor_setup.py -i can0 --current-id 1 --new-id 4       │
 │                                                                      │
 │  Step 9: Power cycle motor 3                                        │
 │  步骤9：给电机3断电重启                                               │
@@ -495,8 +495,8 @@ All motors ship with **CAN ID = 1**. They must be configured individually.
 │  Step 10: Connect all motors and verify                             │
 │  步骤10：连接所有电机并验证                                           │
 │    $ python3 motor_setup.py -i can0 --scan                          │
-│    Expected: Found motors at ID 11, 12, 13                          │
-│    预期结果：在ID 11, 12, 13发现电机                                  │
+│    Expected: Found motors at ID 6, 5, 4                             │
+│    预期结果：在ID 6, 5, 4发现电机                                      │
 │                                                                      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
