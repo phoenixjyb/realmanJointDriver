@@ -130,6 +130,109 @@ colcon build --packages-select realman_arm_driver
 source install/setup.bash
 ```
 
+## Testing CAN Communication | 测试CAN通信
+
+After motor IDs are configured, follow these steps to verify CAN communication:
+
+电机ID配置完成后，按以下步骤验证CAN通信：
+
+### Step 1: Setup CAN Interface | 步骤1：设置CAN接口
+
+```bash
+# Setup CAN FD interface | 设置CAN FD接口
+sudo ip link set can0 type can bitrate 1000000 dbitrate 5000000 fd on
+sudo ip link set can0 up
+
+# Verify | 验证
+ip -details link show can0
+```
+
+### Step 2: Scan for Motors | 步骤2：扫描电机
+
+```bash
+cd /home/nvidia/yanbo/armv1_ws
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --scan
+```
+
+Expected output | 预期输出:
+```
+Found motor ID 6: voltage=24.00V, temp=25.0°C, enabled=0
+Found motor ID 5: voltage=24.00V, temp=25.0°C, enabled=0
+Found motor ID 4: voltage=24.00V, temp=25.0°C, enabled=0
+Total: 3 motor(s) found
+```
+
+### Step 3: Check Each Motor Status | 步骤3：检查每个电机状态
+
+```bash
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 6 --status
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 5 --status
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 4 --status
+```
+
+### Step 4: Clear IAP Flags (Required) | 步骤4：清除IAP标志（必须）
+
+```bash
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 6 --clear-iap
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 5 --clear-iap
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 4 --clear-iap
+```
+
+### Step 5: Clear Any Errors | 步骤5：清除错误
+
+```bash
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 6 --clear-errors
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 5 --clear-errors
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 4 --clear-errors
+```
+
+### Step 6: Test Enable/Disable | 步骤6：测试使能/禁用
+
+```bash
+# Enable one motor | 使能一个电机
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 6 --enable
+
+# Check status (should show enabled=1) | 检查状态（应显示enabled=1）
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 6 --status
+
+# Disable | 禁用
+python3 src/realman_arm_driver/scripts/motor_setup.py -i can0 --id 6 --disable
+```
+
+### Step 7: Launch ROS2 Driver | 步骤7：启动ROS2驱动
+
+```bash
+cd /home/nvidia/yanbo/armv1_ws
+source /opt/ros/humble/setup.bash
+source install/setup.bash
+ros2 launch realman_arm_driver arm_driver.launch.py
+```
+
+### Step 8: Test ROS2 Interface | 步骤8：测试ROS2接口
+
+In another terminal | 在另一个终端:
+
+```bash
+source /opt/ros/humble/setup.bash
+source /home/nvidia/yanbo/armv1_ws/install/setup.bash
+
+# Monitor joint states | 监控关节状态
+ros2 topic echo /realman_arm_driver/joint_states
+
+# Check arm status | 检查机械臂状态
+ros2 topic echo /realman_arm_driver/status
+
+# Enable all motors | 使能所有电机
+ros2 service call /realman_arm_driver/enable std_srvs/srv/SetBool "{data: true}"
+
+# Send position command (all zeros = home position) | 发送位置指令（全零=初始位置）
+ros2 topic pub --once /realman_arm_driver/joint_commands sensor_msgs/msg/JointState \
+  "{name: ['base_yaw', 'base_pitch', 'elbow'], position: [0.0, 0.0, 0.0]}"
+
+# Disable all motors when done | 完成后禁用所有电机
+ros2 service call /realman_arm_driver/enable std_srvs/srv/SetBool "{data: false}"
+```
+
 ## Usage | 使用方法
 
 ### Launch the driver | 启动驱动
