@@ -59,6 +59,7 @@ ros2 topic pub /realman_arm_driver/joint_commands sensor_msgs/msg/JointState \
 
 ## Documentation | 文档
 
+- **[Quick Start Guide | 快速启动指南](docs/QUICKSTART.md)** - Complete step-by-step bringup 完整分步启动
 - [Driver README | 驱动说明](src/realman_arm_driver/README.md)
 - [Software Requirements | 软件需求](docs/SRD.md)
 - [Software Design | 软件设计](docs/SDD.md)

@@ -84,9 +84,10 @@ class CanInterface:
     def send_frame(self, can_id: int, data: bytes) -> bool:
         """Send CAN FD frame | 发送CAN FD帧"""
         try:
-            # CAN FD frame format: can_id (4) + len (1) + flags (1) + res (2) + data (64)
-            flags = 0x01  # CANFD_BRS
-            frame = struct.pack("=IB3x", can_id, len(data)) + data.ljust(64, b'\x00')
+            # CAN FD frame format (struct canfd_frame):
+            # can_id (4) + len (1) + flags (1) + __res0 (1) + __res1 (1) + data (64) = 72 bytes
+            flags = 0x01  # CANFD_BRS - Bit Rate Switch
+            frame = struct.pack("=IBBBB", can_id, len(data), flags, 0, 0) + data.ljust(64, b'\x00')
             self.sock.send(frame)
             return True
         except Exception as e:
@@ -368,6 +369,72 @@ def clear_iap_flag(can: CanInterface, motor_id: int) -> bool:
         return False
 
 
+def init_all_motors(can: CanInterface, motor_ids: list) -> bool:
+    """Initialize all motors: clear IAP flags and errors | 初始化所有电机"""
+    print("="*60)
+    print("Initializing all motors | 初始化所有电机")
+    print("="*60)
+    print(f"Motor IDs: {motor_ids}")
+    print()
+    
+    success_count = 0
+    
+    for motor_id in motor_ids:
+        print(f"--- Motor ID {motor_id} ---")
+        
+        # Step 1: Clear IAP flag (REQUIRED before any communication)
+        print(f"  [1/3] Clearing IAP flag... | 清除IAP标志...")
+        if write_register(can, motor_id, REG_IAP_FLAG, 0):
+            print(f"        OK | 成功")
+        else:
+            print(f"        FAILED (motor may not be connected) | 失败（电机可能未连接）")
+            continue
+        
+        time.sleep(0.05)
+        
+        # Step 2: Clear errors
+        print(f"  [2/3] Clearing errors... | 清除错误...")
+        if write_register(can, motor_id, REG_CLEAR_ERROR, 1):
+            print(f"        OK | 成功")
+        else:
+            print(f"        FAILED | 失败")
+        
+        time.sleep(0.05)
+        
+        # Step 3: Query status to verify
+        print(f"  [3/3] Verifying status... | 验证状态...")
+        status = query_status(can, motor_id)
+        if status:
+            print(f"        OK - Voltage: {status['voltage']:.1f}V, Temp: {status['temperature']:.1f}°C")
+            print(f"        OK - 电压: {status['voltage']:.1f}V, 温度: {status['temperature']:.1f}°C")
+            success_count += 1
+        else:
+            print(f"        FAILED to get status | 获取状态失败")
+        
+        print()
+    
+    print("="*60)
+    print(f"Result: {success_count}/{len(motor_ids)} motors initialized successfully")
+    print(f"结果: {success_count}/{len(motor_ids)} 个电机初始化成功")
+    print("="*60)
+    
+    if success_count == len(motor_ids):
+        print("\nAll motors ready! You can now run the ROS2 driver.")
+        print("所有电机就绪！现在可以运行ROS2驱动。")
+        print("\n  ros2 launch realman_arm_driver arm_driver.launch.py")
+    elif success_count > 0:
+        print(f"\nPartial success. Check connections for failed motors.")
+        print(f"部分成功。请检查失败电机的连接。")
+    else:
+        print("\nNo motors responded. Please check:")
+        print("没有电机响应。请检查：")
+        print("  1. Motor power (24V/48V) | 电机电源")
+        print("  2. CAN wiring (CANH, CANL, GND) | CAN接线")
+        print("  3. Termination resistor (120Ω) | 终端电阻")
+    
+    return success_count == len(motor_ids)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='RealMan Motor Setup Utility | 睿尔曼电机设置工具',
@@ -430,6 +497,10 @@ Examples | 示例:
                         help='Disable motor | 禁用电机')
     parser.add_argument('--clear-iap', action='store_true',
                         help='Clear IAP flag | 清除IAP标志')
+    parser.add_argument('--init-all', action='store_true',
+                        help='Initialize all motors (IDs 4,5,6): clear IAP, clear errors | 初始化所有电机')
+    parser.add_argument('--motor-ids', type=str, default='4,5,6',
+                        help='Motor IDs for --init-all (default: 4,5,6) | 用于--init-all的电机ID')
     
     args = parser.parse_args()
     
@@ -446,7 +517,12 @@ Examples | 示例:
     
     try:
         # Handle commands
-        if args.scan:
+        if args.init_all:
+            # Parse motor IDs
+            motor_ids = [int(x.strip()) for x in args.motor_ids.split(',')]
+            init_all_motors(can, motor_ids)
+        
+        elif args.scan:
             scan_motors(can)
         
         elif args.current_id is not None and args.new_id is not None:
