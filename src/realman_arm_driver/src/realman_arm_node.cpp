@@ -1,5 +1,6 @@
 #include "realman_arm_driver/realman_arm_node.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <functional>
 
@@ -9,6 +10,26 @@ namespace realman_arm_driver
 using namespace std::chrono_literals;
 using std::placeholders::_1;
 using std::placeholders::_2;
+
+namespace
+{
+constexpr double kPi = 3.14159265358979323846;
+constexpr double kDegToRad = kPi / 180.0;
+constexpr double kRadToDeg = 180.0 / kPi;
+constexpr double kMaxPositionStepDeg = 20.0;
+constexpr double kMaxPositionStepRad = kMaxPositionStepDeg * kDegToRad;
+constexpr int kAutoEnableRetryMs = 1000;
+
+inline double degreesToRadians(double degrees)
+{
+  return degrees * kDegToRad;
+}
+
+inline double radiansToDegrees(double radians)
+{
+  return radians * kRadToDeg;
+}
+}  // namespace
 
 RealmanArmNode::RealmanArmNode(const rclcpp::NodeOptions & options)
   : Node("realman_arm_driver", options)
@@ -27,6 +48,7 @@ RealmanArmNode::RealmanArmNode(const rclcpp::NodeOptions & options)
   current_velocities_.resize(num_joints_, 0.0);
   current_currents_.resize(num_joints_, 0.0);
   error_codes_.resize(num_joints_, 0);
+  comm_ok_.assign(num_joints_, false);
 
   // Create publishers
   joint_state_pub_ = create_publisher<sensor_msgs::msg::JointState>(
@@ -187,16 +209,90 @@ bool RealmanArmNode::initializeCan()
 
 bool RealmanArmNode::initializeMotors()
 {
-  for (const auto & joint : joints_) {
-    RCLCPP_INFO(get_logger(), "Initializing joint '%s' (ID: %d)...", 
-                joint.name.c_str(), joint.can_id);
-
-    // Clear IAP flag (required per protocol)
-    if (set_iap_flag_on_startup_) {
-      if (!can_interface_->clearIapFlag(joint.can_id)) {
-        RCLCPP_WARN(get_logger(), "Failed to clear IAP flag for joint %s", joint.name.c_str());
+  // Step 1: Clear IAP flags first for all motors
+  // This MUST succeed before proceeding with other initialization
+  // 持续发送并监听30秒，记录所有响应情况
+  if (set_iap_flag_on_startup_) {
+    RCLCPP_INFO(get_logger(), "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    RCLCPP_INFO(get_logger(), "Clearing IAP flags for all joints (max 30s per joint)...");
+    RCLCPP_INFO(get_logger(), "Will continuously send CAN messages and listen for responses");
+    RCLCPP_INFO(get_logger(), "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    
+    bool all_success = true;
+    std::vector<std::string> failed_joints;
+    std::vector<std::string> success_joints;
+    
+    for (const auto & joint : joints_) {
+      RCLCPP_INFO(get_logger(), ""); 
+      RCLCPP_INFO(get_logger(), "[%s] Starting IAP clear sequence...", joint.name.c_str());
+      RCLCPP_INFO(get_logger(), "  → CAN ID: 0x%02X", joint.can_id);
+      RCLCPP_INFO(get_logger(), "  → Sending: [02 49 00] to 0x%02X", joint.can_id);
+      RCLCPP_INFO(get_logger(), "  → Expecting: [02 49 01] from 0x%03X", joint.can_id + 0x100);
+      RCLCPP_INFO(get_logger(), "  → Timeout: 30 seconds");
+      
+      std::string error_msg;
+      bool success = can_interface_->clearIapFlagWithDetails(joint.can_id, error_msg);
+      
+      if (success) {
+        RCLCPP_INFO(get_logger(), "  ✓ SUCCESS: %s", error_msg.c_str());
+        success_joints.push_back(joint.name);
+      } else {
+        RCLCPP_ERROR(get_logger(), "  ✗ FAILED: %s", error_msg.c_str());
+        failed_joints.push_back(joint.name);
+        all_success = false;
       }
     }
+    
+    // Summary report
+    RCLCPP_INFO(get_logger(), "");
+    RCLCPP_INFO(get_logger(), "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    RCLCPP_INFO(get_logger(), "IAP Clear Summary:");
+    RCLCPP_INFO(get_logger(), "  Total joints: %zu", joints_.size());
+    RCLCPP_INFO(get_logger(), "  Successful:   %zu", success_joints.size());
+    RCLCPP_INFO(get_logger(), "  Failed:       %zu", failed_joints.size());
+    
+    if (!success_joints.empty()) {
+      RCLCPP_INFO(get_logger(), "");
+      RCLCPP_INFO(get_logger(), "✓ Successfully cleared IAP flags:");
+      for (const auto & name : success_joints) {
+        RCLCPP_INFO(get_logger(), "    - %s", name.c_str());
+      }
+    }
+    
+    if (!failed_joints.empty()) {
+      RCLCPP_ERROR(get_logger(), "");
+      RCLCPP_ERROR(get_logger(), "✗ Failed to clear IAP flags:");
+      for (const auto & name : failed_joints) {
+        RCLCPP_ERROR(get_logger(), "    - %s", name.c_str());
+      }
+      RCLCPP_ERROR(get_logger(), "");
+      RCLCPP_ERROR(get_logger(), "Troubleshooting steps:");
+      RCLCPP_ERROR(get_logger(), "  1. Check motor power (LED should be on)");
+      RCLCPP_ERROR(get_logger(), "  2. Verify CAN bus connections (CAN-H, CAN-L)");
+      RCLCPP_ERROR(get_logger(), "  3. Confirm CAN interface: ip link show can0");
+      RCLCPP_ERROR(get_logger(), "  4. Monitor CAN traffic: candump can0");
+      RCLCPP_ERROR(get_logger(), "  5. Check motor CAN ID matches configuration");
+      RCLCPP_ERROR(get_logger(), "  6. Try power cycling the motors");
+    }
+    
+    RCLCPP_INFO(get_logger(), "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    
+    if (!all_success) {
+      RCLCPP_ERROR(get_logger(), "");
+      RCLCPP_ERROR(get_logger(), "Cannot proceed with initialization due to IAP clear failures");
+      return false;
+    }
+    
+    RCLCPP_INFO(get_logger(), "");
+    RCLCPP_INFO(get_logger(), "All IAP flags cleared successfully! Proceeding with initialization...");
+    RCLCPP_INFO(get_logger(), "");
+  }
+
+  // Step 2: Now proceed with normal initialization for each joint
+  for (size_t i = 0; i < joints_.size(); ++i) {
+    const auto & joint = joints_[i];
+    RCLCPP_INFO(get_logger(), "Initializing joint '%s' (ID: %d)...", 
+                joint.name.c_str(), joint.can_id);
 
     // Clear errors
     if (clear_errors_on_startup_) {
@@ -213,6 +309,7 @@ bool RealmanArmNode::initializeMotors()
     // Query initial status
     auto status = can_interface_->queryStatus(joint.can_id);
     if (status.valid) {
+      comm_ok_[i] = true;
       RCLCPP_INFO(get_logger(), "  Joint %s: voltage=%.2fV, temp=%.1f°C, enabled=%d, errors=0x%04X",
                   joint.name.c_str(),
                   rawToVolts(status.voltage_raw),
@@ -224,13 +321,10 @@ bool RealmanArmNode::initializeMotors()
     }
   }
 
-  // Enable motors if configured
+  // Auto-enable after first successful communication with all joints.
+  auto_enable_pending_.store(enable_on_startup_);
   if (enable_on_startup_) {
-    for (const auto & joint : joints_) {
-      can_interface_->setEnabled(joint.can_id, true);
-    }
-    enabled_ = true;
-    RCLCPP_INFO(get_logger(), "Motors enabled on startup");
+    RCLCPP_INFO(get_logger(), "Auto-enable pending: waiting for joint communication");
   }
 
   return true;
@@ -264,8 +358,12 @@ void RealmanArmNode::controlLoopCallback()
     if (enabled_) {
       switch (control_mode_) {
         case ControlMode::POSITION: {
-          double clamped = clampPosition(i, targets_pos[i]);
-          int32_t raw = radiansToRaw(clamped);
+          double desired = clampPosition(i, targets_pos[i]);
+          double current = current_positions_[i];
+          double delta = desired - current;
+          double step = std::clamp(delta, -kMaxPositionStepRad, kMaxPositionStepRad);
+          double limited = clampPosition(i, current + step);
+          int32_t raw = radiansToRaw(limited);
           fb = can_interface_->sendPositionCommand(joints_[i].can_id, raw);
           break;
         }
@@ -369,14 +467,52 @@ void RealmanArmNode::statusLoopCallback()
       joint_status.temperature = rawToCelsius(status.temp_raw);
       joint_status.current = status.current_raw / 1000.0f;
       joint_status.position = rawToRadians(status.position_raw);
+      joint_status.position_deg = radiansToDegrees(joint_status.position);
       joint_status.velocity = current_velocities_[i];  // From servo feedback
 
       if (status.error_code != 0) {
         status_msg.any_errors = true;
       }
+      comm_ok_[i] = true;
     }
 
     status_msg.joints.push_back(joint_status);
+  }
+
+  if (auto_enable_pending_.load() && !enabled_.load()) {
+    bool any_comm_ok = std::any_of(comm_ok_.begin(), comm_ok_.end(),
+                                   [](bool ok) { return ok; });
+    if (any_comm_ok) {
+      const auto now_time = now();
+      const bool should_retry =
+        last_auto_enable_attempt_.nanoseconds() == 0 ||
+        (now_time - last_auto_enable_attempt_).nanoseconds() >=
+          static_cast<int64_t>(kAutoEnableRetryMs) * 1000000LL;
+      if (should_retry) {
+        last_auto_enable_attempt_ = now_time;
+        size_t attempted = 0;
+        size_t enabled_count = 0;
+        for (size_t i = 0; i < joints_.size(); ++i) {
+          if (!comm_ok_[i]) {
+            continue;
+          }
+          attempted++;
+          if (can_interface_->setEnabled(joints_[i].can_id, true)) {
+            enabled_count++;
+          } else {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                                 "Auto-enable failed for joint %s", joints_[i].name.c_str());
+          }
+        }
+        if (enabled_count > 0) {
+          enabled_ = true;
+          auto_enable_pending_.store(false);
+          RCLCPP_INFO(get_logger(),
+                      "Motors auto-enabled after communication ready (%zu/%zu)",
+                      enabled_count, attempted);
+        }
+      }
+    }
   }
 
   arm_status_pub_->publish(status_msg);
@@ -392,7 +528,7 @@ void RealmanArmNode::jointCommandCallback(const sensor_msgs::msg::JointState::Sh
       if (msg->name[i] == joints_[j].name) {
         // Update targets based on what's provided
         if (i < msg->position.size()) {
-          target_positions_[j] = msg->position[i];
+          target_positions_[j] = degreesToRadians(msg->position[i]);
         }
         if (i < msg->velocity.size()) {
           target_velocities_[j] = msg->velocity[i];
@@ -415,6 +551,9 @@ void RealmanArmNode::enableServiceCallback(
   std::shared_ptr<std_srvs::srv::SetBool::Response> response)
 {
   bool success = true;
+  if (!request->data) {
+    auto_enable_pending_.store(false);
+  }
   for (const auto & joint : joints_) {
     if (!can_interface_->setEnabled(joint.can_id, request->data)) {
       success = false;
@@ -425,6 +564,9 @@ void RealmanArmNode::enableServiceCallback(
 
   if (success) {
     enabled_ = request->data;
+    if (request->data) {
+      auto_enable_pending_.store(false);
+    }
     response->success = true;
     response->message = request->data ? "Motors enabled" : "Motors disabled";
     RCLCPP_INFO(get_logger(), "%s", response->message.c_str());

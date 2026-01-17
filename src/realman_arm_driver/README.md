@@ -225,7 +225,7 @@ ros2 topic echo /realman_arm_driver/status
 # Enable all motors | 使能所有电机
 ros2 service call /realman_arm_driver/enable std_srvs/srv/SetBool "{data: true}"
 
-# Send position command (all zeros = home position) | 发送位置指令（全零=初始位置）
+# Send position command (degrees, all zeros = home position) | 发送位置指令（单位：度，全零=初始位置）
 ros2 topic pub --once /realman_arm_driver/joint_commands sensor_msgs/msg/JointState \
   "{name: ['base_yaw', 'base_pitch', 'elbow'], position: [0.0, 0.0, 0.0]}"
 
@@ -279,9 +279,9 @@ ros2 service call /realman_arm_driver/enable std_srvs/srv/SetBool "{data: true}"
 # Set position mode | 设置位置模式
 ros2 service call /realman_arm_driver/set_mode realman_arm_driver/srv/SetMode "{mode: 3}"
 
-# Send position command (radians) | 发送位置指令（弧度）
+# Send position command (degrees) | 发送位置指令（度）
 ros2 topic pub /realman_arm_driver/joint_commands sensor_msgs/msg/JointState \
-  "{name: ['base_yaw', 'base_pitch', 'elbow'], position: [0.0, 0.5, -0.3]}"
+  "{name: ['base_yaw', 'base_pitch', 'elbow'], position: [0.0, 30.0, -20.0]}"
 
 # Monitor joint states | 监控关节状态
 ros2 topic echo /realman_arm_driver/joint_states
@@ -295,6 +295,8 @@ ros2 service call /realman_arm_driver/clear_errors std_srvs/srv/Trigger
 # Disable motors | 禁用电机
 ros2 service call /realman_arm_driver/enable std_srvs/srv/SetBool "{data: false}"
 ```
+
+Note: position commands are in degrees, and the driver limits each command step to 20° (larger moves are split automatically). | 注意：位置指令单位为度，驱动会将单次指令步长限制为 20°（更大的角度会自动拆分）。
 
 ## Configuration | 配置
 

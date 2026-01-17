@@ -167,6 +167,14 @@ public:
   bool clearIapFlag(uint16_t joint_id);
 
   /**
+   * @brief Clear IAP flag with detailed error reporting
+   * @param joint_id Motor CAN ID
+   * @param error_msg Output string for error details
+   * @return true if successful
+   */
+  bool clearIapFlagWithDetails(uint16_t joint_id, std::string & error_msg);
+
+  /**
    * @brief Get interface name
    */
   const std::string & getInterfaceName() const { return interface_name_; }

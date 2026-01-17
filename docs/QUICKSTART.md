@@ -209,18 +209,21 @@ ros2 service list | grep realman
 ## Step 9: Send Position Commands | 步骤9：发送位置命令
 
 ```bash
-# Send position command (all zeros = current position) | 发送位置命令（全零=当前位置）
+# Send position command (degrees, all zeros = current position) | 发送位置命令（单位：度，全零=当前位置）
 ros2 topic pub --once /realman_arm_driver/joint_commands sensor_msgs/msg/JointState \
   "{name: ['base_yaw', 'base_pitch', 'elbow'], position: [0.0, 0.0, 0.0]}"
 
-# Move base_yaw 10 degrees (0.1745 rad) | 移动base_yaw 10度
+# Move base_yaw 10 degrees | 移动base_yaw 10度
 ros2 topic pub --once /realman_arm_driver/joint_commands sensor_msgs/msg/JointState \
-  "{name: ['base_yaw', 'base_pitch', 'elbow'], position: [0.1745, 0.0, 0.0]}"
+  "{name: ['base_yaw', 'base_pitch', 'elbow'], position: [10.0, 0.0, 0.0]}"
 
 # Return to zero | 返回零位
 ros2 topic pub --once /realman_arm_driver/joint_commands sensor_msgs/msg/JointState \
   "{name: ['base_yaw', 'base_pitch', 'elbow'], position: [0.0, 0.0, 0.0]}"
 ```
+
+Note: position commands are in degrees, and the driver limits each command step to 20° (larger moves are split automatically).  
+注意：位置指令单位为度，驱动会将单次指令步长限制为 20°（更大的角度会自动拆分）。
 
 ---
 

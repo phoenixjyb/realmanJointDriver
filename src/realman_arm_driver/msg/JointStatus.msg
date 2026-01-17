@@ -15,4 +15,5 @@ float32 current          # Current (A)
 
 # Position
 float64 position         # Current position (rad)
+float64 position_deg     # Current position (deg)
 float64 velocity         # Current velocity (rad/s)

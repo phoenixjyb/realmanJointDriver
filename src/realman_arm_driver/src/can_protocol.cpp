@@ -1,6 +1,9 @@
 #include "realman_arm_driver/can_protocol.hpp"
 
 #include <cstring>
+#include <chrono>
+#include <thread>
+#include <vector>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <net/if.h>
@@ -273,21 +276,21 @@ JointStatus CanInterface::queryStatus(uint16_t joint_id)
 
 bool CanInterface::writeRegister(uint16_t joint_id, uint8_t reg_addr, uint16_t value)
 {
-  uint8_t data[4];
-  data[0] = static_cast<uint8_t>(CanCommand::CMD_WRITE);
-  data[1] = reg_addr;
-  data[2] = value & 0xFF;
-  data[3] = (value >> 8) & 0xFF;
+  // According to protocol: DLC=3, data=[CMD, INDEX, DATA]
+  uint8_t data[3];
+  data[0] = static_cast<uint8_t>(CanCommand::CMD_WRITE);  // 0x02
+  data[1] = reg_addr;                                      // Register address
+  data[2] = value & 0xFF;                                  // Value (only low byte)
 
   uint32_t tx_id = joint_id;
   uint32_t rx_id = joint_id + CanIdOffset::RESPONSE;
 
-  if (!sendFrame(tx_id, data, 4)) {
+  if (!sendFrame(tx_id, data, 3)) {
     return false;
   }
 
   auto response = receiveFrameWithId(rx_id, 10);
-  if (!response || response->len < 4) {
+  if (!response || response->len < 3) {
     return false;
   }
 
@@ -350,7 +353,199 @@ bool CanInterface::clearErrors(uint16_t joint_id)
 
 bool CanInterface::clearIapFlag(uint16_t joint_id)
 {
-  return writeRegister(joint_id, Register::IAP_FLAG, 0);
+  // IAP clear with retry mechanism - send repeatedly for up to 30 seconds
+  // 持续发送IAP清除命令，最多30秒
+  
+  const int max_duration_ms = 30000;  // 30 seconds
+  const int retry_interval_ms = 100;   // Send every 100ms
+  const int receive_timeout_ms = 50;   // Short timeout for each receive attempt
+  
+  uint8_t data[3];
+  data[0] = static_cast<uint8_t>(CanCommand::CMD_WRITE);  // 0x02
+  data[1] = Register::IAP_FLAG;                           // 0x49
+  data[2] = 0x00;  // Value (0 = clear IAP)
+
+  uint32_t tx_id = joint_id;
+  uint32_t rx_id = joint_id + CanIdOffset::RESPONSE;  // 0x100 + joint_id
+
+  auto start_time = std::chrono::steady_clock::now();
+  int send_count = 0;
+  std::string last_error;
+  
+  while (true) {
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - start_time).count();
+    
+    if (elapsed >= max_duration_ms) {
+      // Timeout after 30 seconds
+      break;
+    }
+
+    // Send IAP clear command (DLC=3: 02 49 00)
+    send_count++;
+    if (!sendFrame(tx_id, data, 3)) {
+      last_error = "Failed to send CAN frame";
+      std::this_thread::sleep_for(std::chrono::milliseconds(retry_interval_ms));
+      continue;
+    }
+
+    // Try to receive response (with short timeout to allow retry)
+    auto response = receiveFrameWithId(rx_id, receive_timeout_ms);
+    
+    if (response) {
+      // Got a response, check if it's the correct one
+      if (response->len >= 3) {
+        uint8_t cmd = response->data[0];
+        uint8_t reg = response->data[1];
+        uint8_t status = response->data[2];
+        
+        // Check for success: 0x02 0x49 0x01
+        if (cmd == static_cast<uint8_t>(CanCommand::CMD_WRITE) &&
+            reg == Register::IAP_FLAG &&
+            status == 0x01) {
+          // Success! Motor has exited IAP mode
+          return true;
+        }
+        
+        // Got a response but not the expected one - record it
+        char err_buf[256];
+        snprintf(err_buf, sizeof(err_buf),
+                 "Unexpected response: CMD=0x%02X, REG=0x%02X, STATUS=0x%02X (expected: 0x02 0x49 0x01)",
+                 cmd, reg, status);
+        last_error = err_buf;
+        
+        // If we got a response but wrong status, the motor might be in error state
+        // Continue trying in case it recovers
+      } else {
+        // Response too short
+        char err_buf[128];
+        snprintf(err_buf, sizeof(err_buf), 
+                 "Response too short: %d bytes (expected >= 3)", response->len);
+        last_error = err_buf;
+      }
+    }
+    
+    // Wait before next retry
+    std::this_thread::sleep_for(std::chrono::milliseconds(retry_interval_ms));
+  }
+  
+  // Failed after 30 seconds - this should not happen in normal operation
+  return false;
+}
+
+bool CanInterface::clearIapFlagWithDetails(uint16_t joint_id, std::string & error_msg)
+{
+  // IAP clear with retry mechanism - send repeatedly for up to 30 seconds
+  // 持续发送IAP清除命令，最多30秒，并记录详细错误信息
+  
+  const int max_duration_ms = 30000;  // 30 seconds
+  const int retry_interval_ms = 100;   // Send every 100ms
+  const int receive_timeout_ms = 50;   // Short timeout for each receive attempt
+  
+  uint8_t data[3];
+  data[0] = static_cast<uint8_t>(CanCommand::CMD_WRITE);  // 0x02
+  data[1] = Register::IAP_FLAG;                           // 0x49
+  data[2] = 0x00;  // Value (0 = clear IAP)
+
+  uint32_t tx_id = joint_id;
+  uint32_t rx_id = joint_id + CanIdOffset::RESPONSE;  // 0x100 + joint_id
+
+  auto start_time = std::chrono::steady_clock::now();
+  int send_count = 0;
+  int response_count = 0;
+  std::vector<std::string> errors;
+  std::string last_unexpected_response;
+  
+  error_msg.clear();
+  
+  while (true) {
+    auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - start_time).count();
+    
+    if (elapsed >= max_duration_ms) {
+      // Timeout after 30 seconds
+      char summary[512];
+      if (response_count == 0) {
+        snprintf(summary, sizeof(summary),
+                 "No response from motor 0x%02X after 30s (%d attempts). "
+                 "Motor may be: 1) Powered off, 2) CAN disconnected, 3) Wrong CAN ID, 4) Hardware fault",
+                 joint_id, send_count);
+      } else {
+        snprintf(summary, sizeof(summary),
+                 "Motor 0x%02X responded %d times but never sent correct IAP clear confirmation (0x02 0x49 0x01) in 30s. "
+                 "Last response: %s",
+                 joint_id, response_count, last_unexpected_response.c_str());
+      }
+      error_msg = summary;
+      return false;
+    }
+
+    // Send IAP clear command (DLC=3: 02 49 00)
+    send_count++;
+    if (!sendFrame(tx_id, data, 3)) {
+      char err[128];
+      snprintf(err, sizeof(err), "Failed to send CAN frame (attempt %d)", send_count);
+      if (errors.size() < 10) {  // Limit error storage
+        errors.push_back(err);
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(retry_interval_ms));
+      continue;
+    }
+
+    // Try to receive response (with short timeout to allow retry)
+    auto response = receiveFrameWithId(rx_id, receive_timeout_ms);
+    
+    if (response) {
+      response_count++;
+      
+      // Got a response, check if it's the correct one
+      if (response->len >= 3) {
+        uint8_t cmd = response->data[0];
+        uint8_t reg = response->data[1];
+        uint8_t status = response->data[2];
+        
+        // Check for success: 0x02 0x49 0x01
+        if (cmd == static_cast<uint8_t>(CanCommand::CMD_WRITE) &&
+            reg == Register::IAP_FLAG &&
+            status == 0x01) {
+          // Success! Motor has exited IAP mode
+          char success_msg[256];
+          snprintf(success_msg, sizeof(success_msg),
+                   "Motor 0x%02X IAP cleared successfully after %.1fs (%d attempts)",
+                   joint_id, elapsed / 1000.0, send_count);
+          error_msg = success_msg;
+          return true;
+        }
+        
+        // Got a response but not the expected one - record it
+        char err_buf[256];
+        snprintf(err_buf, sizeof(err_buf),
+                 "CAN ID 0x%03X response: [%02X %02X %02X] (expected: [02 49 01])",
+                 rx_id, cmd, reg, status);
+        last_unexpected_response = err_buf;
+        
+        // Store unique errors
+        if (errors.empty() || errors.back() != err_buf) {
+          if (errors.size() < 20) {
+            errors.push_back(err_buf);
+          }
+        }
+      } else {
+        // Response too short
+        char err_buf[128];
+        snprintf(err_buf, sizeof(err_buf), 
+                 "CAN ID 0x%03X response too short: %d bytes", rx_id, response->len);
+        last_unexpected_response = err_buf;
+        
+        if (errors.size() < 10) {
+          errors.push_back(err_buf);
+        }
+      }
+    }
+    
+    // Wait before next retry
+    std::this_thread::sleep_for(std::chrono::milliseconds(retry_interval_ms));
+  }
 }
 
 // ============================================================================

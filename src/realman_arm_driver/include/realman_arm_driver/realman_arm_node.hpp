@@ -156,7 +156,7 @@ private:
 
   // Targets (protected by mutex)
   std::mutex target_mutex_;
-  std::vector<double> target_positions_;   // radians
+  std::vector<double> target_positions_;   // radians (from degree commands)
   std::vector<double> target_velocities_;  // rad/s
   std::vector<double> target_currents_;    // mA
 
@@ -165,6 +165,9 @@ private:
   std::vector<double> current_velocities_;  // rad/s
   std::vector<double> current_currents_;    // mA (as effort in A)
   std::vector<uint16_t> error_codes_;
+  std::vector<bool> comm_ok_;
+  std::atomic<bool> auto_enable_pending_{false};
+  rclcpp::Time last_auto_enable_attempt_;
 
   // Parameters
   std::string can_interface_name_;

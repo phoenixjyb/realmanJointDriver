@@ -36,6 +36,6 @@ realman_arm_driver:
     default_mode: 3
     
     # Safety settings
-    enable_on_startup: false  # Don't auto-enable motors
+    enable_on_startup: true   # Auto-enable after communication is ready
     clear_errors_on_startup: true
     set_iap_flag_on_startup: true  # Required per protocol
